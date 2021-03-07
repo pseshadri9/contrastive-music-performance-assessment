@@ -42,10 +42,12 @@ class ContrastiveLoss(torch.nn.Module):
 
         # Use cosine similarity in scores as distance function 
         #diff = self.cosine_sim(conv_out[:-1, :], conv_out[1:,:]) #torch.abs(targets[:-1] - targets[1:]) preds[:-1, :], preds[1:,:]
-        if conv_out.shape[0] % 2 == 1:
+        if conv_out.shape[0] % 2 == 1 and conv_out.shape[0] != 1:
             conv_out = conv_out[1:, :]
             targets = targets[1:]
             preds = preds[1:]
+        elif conv_out.shape[0] == 1:
+            return torch.tensor(0)
         diff = self.cosine_sim(conv_out[1::2, :], conv_out[::2,:])
         dist_sq = torch.pow(diff, 2)
 
@@ -54,7 +56,7 @@ class ContrastiveLoss(torch.nn.Module):
         Y_targ = self.label_map(targets)
 
         #compare labels and compute accuracyd
-        Y_diff = torch.eq(Y_pred, Y_targ).long()
+        Y_diff = torch.eq(Y_pred, Y_targ).float()
         acc = torch.sum(Y_diff) / Y_diff.shape[0]
 
         #compare labels for contrastive pairs

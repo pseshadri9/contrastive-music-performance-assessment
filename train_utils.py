@@ -88,10 +88,13 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
             if strength:
                 mse_str, c_str = strength
             else:
-                mse_str, c_str = 1
+                mse_str, c_str = (1,1)
             conv_out = torch.mean(conv_out, 2)
             c_loss = contrastive(model_output, model_target, conv_out)
-            loss = mse_str*loss + c_str*c_loss
+            if mse_str == 0 and False:
+                loss = c_loss
+            else:
+                loss = mse_str*loss + c_str*c_loss
         # compute backward pass and step
         loss.backward()
         optimizer.step()

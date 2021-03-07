@@ -47,7 +47,7 @@ CTYPE = 0
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
 instrument = 'clarinet'
 cross_instrument = 'ALL'
-experiment = 'updated_pairs'
+experiment = 'test-accu-cosine3'
 METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
@@ -58,11 +58,11 @@ NAME = '{0}_{1}_{2}_{3}_{4}'.format(BAND, instrument, metric_type[METRIC], INPUT
 
 #SET TRAINING CONSTANTS
 contrastive = True
-MSE_LOSS_STR = 0.75
-CONTR_LOSS_STR = 0.5
+MSE_LOSS_STR = 0
+CONTR_LOSS_STR = 1
 num_labels = 5
 #HYPERPARAMETERS
-LR_RATE = 0.001 #0.01
+LR_RATE = 0.0005 #0.01
 W_DECAY = 1e-5 #5e-4 #1e-5
 MOMENTUM = 0.9
 
@@ -158,6 +158,8 @@ try:
     for epoch in range(1, NUM_EPOCHS + 1):
         # perform training and validation
         train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
+        if contrastive:
+            loss_contrastive, acc_contrastive = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
         # adjut learning rate
         # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
         # log data for visualization later
@@ -171,6 +173,9 @@ try:
         log_value('val_accu', val_accu, epoch)
         log_value('train_accu2', train_accu2, epoch)
         log_value('val_accu2', val_accu2, epoch)
+        if contrastive:
+            log_value('contrastive loss', loss_contrastive, epoch)
+            log_value('contrastive acc', acc_contrastive, epoch)
         #####
 
         # print loss
@@ -178,6 +183,9 @@ try:
             print('[%s (%d %.1f%%)]' % (train_utils.time_since(START), epoch, float(epoch) / NUM_EPOCHS * 100))
             print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
             print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
+
+            if contrastive:
+                print('[%s %0.5f, %s %0.5f]'%('Contrastive Loss: ', loss_contrastive, 'Contrastive Accuracy: ', acc_contrastive))
         # save model if best validation loss
         if val_loss.item() < best_val_loss:
             n = 'pc_contrastive_runs/' + NAME + '_best'
