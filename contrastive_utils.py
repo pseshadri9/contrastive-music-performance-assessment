@@ -40,8 +40,13 @@ class ContrastiveLoss(torch.nn.Module):
         preds = torch.squeeze(preds)
         targets = torch.squeeze(targets)
 
-        # Use euclidean distance in scores as distance function 
-        diff = self.cosine_sim(conv_out[:-1, :], conv_out[1:,:]) #torch.abs(targets[:-1] - targets[1:]) preds[:-1, :], preds[1:,:]
+        # Use cosine similarity in scores as distance function 
+        #diff = self.cosine_sim(conv_out[:-1, :], conv_out[1:,:]) #torch.abs(targets[:-1] - targets[1:]) preds[:-1, :], preds[1:,:]
+        if conv_out.shape[0] % 2 == 1:
+            conv_out = conv_out[1:, :]
+            targets = targets[1:]
+            preds = preds[1:]
+        diff = self.cosine_sim(conv_out[1::2, :], conv_out[::2,:])
         dist_sq = torch.pow(diff, 2)
 
         #map predictions and targets to labels
@@ -53,8 +58,8 @@ class ContrastiveLoss(torch.nn.Module):
         acc = torch.sum(Y_diff) / Y_diff.shape[0]
 
         #compare labels for contrastive pairs
-        Y_cont = torch.eq(Y_targ[:-1], Y_targ[1:]).long()
+        Y_cont = torch.eq(Y_targ[1::2], Y_targ[::2]).long()
 
         #compute loss
         loss = 0.5*(1 - Y_cont)*dist_sq + 0.5*Y_cont*torch.pow(torch.clamp(acc - diff, min=0.0), 2)
-        return torch.sum(loss)
+        return torch.mean(loss)

@@ -47,8 +47,8 @@ CTYPE = 0
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
 instrument = 'clarinet'
 cross_instrument = 'ALL'
-experiment = 'redo-init_euclid-5class'
-METRIC = 2 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
+experiment = 'updated_pairs'
+METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
 ADD_NOISE_VALID = False
@@ -57,12 +57,12 @@ INPUT_REP = 'Cepstrum'
 NAME = '{0}_{1}_{2}_{3}_{4}'.format(BAND, instrument, metric_type[METRIC], INPUT_REP, experiment)
 
 #SET TRAINING CONSTANTS
-contrastive = False
-MSE_LOSS_STR = 1.0
-CONTR_LOSS_STR = 1.0
+contrastive = True
+MSE_LOSS_STR = 0.75
+CONTR_LOSS_STR = 0.5
 num_labels = 5
 #HYPERPARAMETERS
-LR_RATE = 0.005 #0.01
+LR_RATE = 0.001 #0.01
 W_DECAY = 1e-5 #5e-4 #1e-5
 MOMENTUM = 0.9
 

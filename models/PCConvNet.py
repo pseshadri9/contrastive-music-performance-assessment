@@ -54,12 +54,12 @@ class PCConvNet(nn.Module):
                     nn.Conv1d(1, self.n0_features, self.kernel_size, self.stride),# output is (1000 - 7)/3 + 1 = 332
                     nn.BatchNorm1d(self.n0_features),
                     nn.ReLU(),
-                    #nn.Dropout(),
+                    nn.Dropout(0.15),
                     # define the 2nd convolutional layer
                     nn.Conv1d(self.n0_features, self.n1_features, self.kernel_size, self.stride), # output is (332 - 7)/3 + 1 = 109
                     nn.BatchNorm1d(self.n1_features),
                     nn.ReLU(),
-                    #nn.Dropout(),
+                    nn.Dropout(0.15),
                     # define the 3rd convolutional layer
                     nn.Conv1d(self.n1_features, self.n2_features, self.kernel_size, self.stride), # output is (109 - 7)/3 + 1 = 35
                     nn.BatchNorm1d(self.n2_features),

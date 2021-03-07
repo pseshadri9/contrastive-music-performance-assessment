@@ -27,6 +27,7 @@ def eval_regression(target, pred):
         pred_np = pred.clone().numpy()
         target_np = target.clone().numpy()
     # compute r-sq score 
+    #print(pred_np)
     pred_np[pred_np < 0] = 0
     pred_np[pred_np > 1] = 1
     r_sq = metrics.r2_score(target_np, pred_np)
