@@ -50,11 +50,9 @@ class ContrastiveLoss(torch.nn.Module):
             return torch.tensor(0)
         diff = self.cosine_sim(conv_out[1::2, :], conv_out[::2,:])
         dist_sq = torch.pow(diff, 2)
-
         #map predictions and targets to labels
         Y_pred = self.label_map(preds)
         Y_targ = self.label_map(targets)
-
         #compare labels and compute accuracyd
         Y_diff = torch.eq(Y_pred, Y_targ).float()
         acc = torch.sum(Y_diff) / Y_diff.shape[0]

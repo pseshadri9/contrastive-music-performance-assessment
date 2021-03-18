@@ -206,22 +206,29 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
         _, pred = torch.max(pred, 1) 
     return pred, target
 
-def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
+def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0, classification = False):
         model.eval()
         # intialize variables
         num_batches = len(data)
         pred = np.array([])
         target = np.array([])
         loss_avg = 0
+        if classification:
+            correct = 0
         # iterate over batches for validation
-        for batch_idx in range(0,num_batches,2):
+        for batch_idx in range(1, num_batches + 1, 2):
             # extract pitch tensor and score for the batch
             pitch_tensor = data[batch_idx]['pitch_tensor']
             score_tensor = data[batch_idx]['score_tensor'][:, metric]
             score_tensor = torch.unsqueeze(score_tensor, 1)
+            pitch_tensor2 = data[batch_idx-1]['pitch_tensor']
+            score_tensor2 = data[batch_idx-1]['score_tensor'][:, metric]
+            score_tensor2 = torch.unsqueeze(score_tensor2, 1)
             # prepare data for input to model
             model_input = pitch_tensor.clone()
             model_target = score_tensor.clone()
+            model_input2 = pitch_tensor2.clone()
+            model_target2 = score_tensor2.clone()
             if ctype == 1:
                 #model_input = model_input.long()
                 model_target = model_target.long()
@@ -229,26 +236,36 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
             if torch.cuda.is_available():
                 model_input = model_input.cuda()
                 model_target = model_target.cuda()
+                model_input2 = pitch_tensor2.cuda()
+                model_target2 = score_tensor2.cuda()
             # wrap all tensors in pytorch Variable
             model_input = Variable(model_input)
             model_target = Variable(model_target)
+            model_input2 = Variable(model_input2)
+            model_target2 = Variable(model_target2)
             # compute forward pass for the network
             mini_batch_size = model_input.size(0)
             if mtype == 'lstm':
                 model.init_hidden(mini_batch_size)
-            conv_out = model.forward_conv(model_input)
-            model_output = model.forward(model_input, conv_out=conv_out)
+            conv_out1 = model.forward_conv(model_input)
+            model_output = model.forward(model_input, conv_out=conv_out1)
+            conv_out2 = model.forward_conv(model_input2)
+            model_output2 = model.forward(model_input2,conv_out=conv_out2)
+
+            conv_out = torch.cat((torch.mean(conv_out1, 2), torch.mean(conv_out2, 2)), 0)
             # compute loss
-            loss = criterion(model_output, model_target, torch.mean(conv_out, 2))
+            loss = criterion(model_output, torch.cat((model_target, model_target2), 0), conv_out)
             #print(loss)
             #loss_avg += loss.data[0]
             loss_avg += loss.data
             # concatenate target and pred for computing validation metrics
             if ctype == 0:
                 pred = torch.cat((pred, model_output.data.view(-1)), 0) if pred.size else model_output.data.view(-1)
+                pred = torch.cat((pred, model_output2.data.view(-1)), 0) if pred.size else model_output2.data.view(-1)
             else:
                 pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
             target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
+            target = torch.cat((target, score_tensor2), 0) if target.size else score_tensor2
         if ctype == 1:
             pred = nn.functional.softmax(pred).data
             _, pred = torch.max(pred, 1) 

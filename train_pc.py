@@ -22,7 +22,6 @@ from sklearn import metrics
 import eval_utils
 import train_utils
 import dill
-from contrastive_utils import ContrastiveLoss
 
 # set manual random seed for reproducibility
 torch.manual_seed(1)
@@ -36,19 +35,22 @@ if CUDA_AVAILABLE != True:
 
 # initialize training parameters
 RUN = 110
-NUM_EPOCHS = 500 #250 #2000
+NUM_EPOCHS = 2000
+NUM_DATA_POINTS = 1550  # with the current data, this should be set to 1550 for symphonic band and 1410 for middle school band
 NUM_BATCHES = 10
+BAND = 'symphonic'
 SEGMENT = '2'
+METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 MTYPE = 'conv'
 CTYPE = 0
 # initialize dataset, dataloader and created batched data
 
 #SET CONSTANTS
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
-instrument = 'clarinet'
-cross_instrument = 'ALL'
-experiment = 'test-accu-cosine_dropout'
-METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
+instrument = 'ALL'
+cross_instrument = 'saxophone'
+experiment = 'all-run-newLR'
+METRIC = 3
 BAND = 'middle'
 ADD_NOISE_TEST = False
 ADD_NOISE_VALID = False
@@ -56,25 +58,12 @@ NOISE_SHAPE = 'triangular'  #triangular, normal, or uniform
 INPUT_REP = 'Cepstrum'
 NAME = '{0}_{1}_{2}_{3}_{4}'.format(BAND, instrument, metric_type[METRIC], INPUT_REP, experiment)
 
-#SET TRAINING CONSTANTS
-contrastive = True
-MSE_LOSS_STR = 0
-CONTR_LOSS_STR = 1
-num_labels = 5
-classification = True
-#HYPERPARAMETERS
-LR_RATE = 0.0005 #0.01
-W_DECAY = 1e-5 #5e-4 #1e-5
-MOMENTUM = 0.9
-
 datasets = {'flute':{'test':'/media/SSD/FBA/crossInstr/middle_Flute__test.dill', 'train':'/media/SSD/FBA/crossInstr/middle_Flute__train_fixed.dill', 'valid':'/media/SSD/FBA/crossInstr/middle_Flute__valid.dill'},
             'clarinet':{'test':'/media/SSD/FBA/crossInstr/middle_Bb Clarinet__test.dill', 'train':'/media/SSD/FBA/crossInstr/middle_Bb Clarinet__train.dill', 'valid':'/media/SSD/FBA/crossInstr/middle_Bb Clarinet__valid.dill'},
             'saxophone':{'test':'/media/SSD/FBA/crossInstr/middle_Alto Saxophone__test.dill', 'train':'/media/SSD/FBA/crossInstr/middle_Alto Saxophone__train.dill', 'valid':'/media/SSD/FBA/crossInstr/middle_Alto Saxophone__valid.dill'}}
 datasets_all = {'flute': '/media/SSD/FBA/crossInstr/middle_Flute_.dill', 'saxophone': '/media/SSD/FBA/crossInstr/middle_Alto Saxophone_.dill', 'clarinet':'/media/SSD/FBA/crossInstr/middle_Bb Clarinet_.dill', 
                 'ALL':'/media/SSD/FBA/saved_dill/middle_2_new_dataPC.dill'}
-
 file_name = BAND + '_' + str(SEGMENT) + '_data'
-
 with open(datasets_all[instrument], 'rb') as f:
     NUM_DATA_POINTS = len(dill.load(f))
 if sys.version_info[0] < 3:
@@ -131,10 +120,10 @@ if BAND == 'mast':
     criterion = nn.CrossEntropyLoss()
 else:
     criterion = nn.MSELoss()
-if contrastive:
-    criterion_contrastive = ContrastiveLoss(num_labels=num_labels)
-else:
-    criterion_contrastive = None
+
+LR_RATE = 0.01 #0.01
+W_DECAY = 1e-5
+MOMENTUM = 0.9
 perf_optimizer = optim.SGD(perf_model.parameters(), lr= LR_RATE, momentum=MOMENTUM, weight_decay=W_DECAY)
 #perf_optimizer = optim.Adam(perf_model.parameters(), lr = LR_RATE, weight_decay = W_DECAY)
 print(perf_model)
@@ -143,7 +132,7 @@ print(perf_model)
 file_info = str(NUM_DATA_POINTS) + '_' + str(NUM_EPOCHS) + '_' + BAND + '_' + str(METRIC) + '_' + str(RUN) + '_' + MTYPE + '_onlyATest'       
 
 # configure tensor-board logger
-configure('pc_contrastive_runs/' + NAME + '_Reg' , flush_secs = 2)
+configure('pc_runs/' + NAME + '_Reg' , flush_secs = 2)
 
 ## define training parameters
 PRINT_EVERY = 1
@@ -158,9 +147,7 @@ try:
     print("Training for %d epochs..." % NUM_EPOCHS)
     for epoch in range(1, NUM_EPOCHS + 1):
         # perform training and validation
-        train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
-        if contrastive:
-            loss_contrastive, acc_contrastive = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
+        train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE)
         # adjut learning rate
         # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
         # log data for visualization later
@@ -174,9 +161,6 @@ try:
         log_value('val_accu', val_accu, epoch)
         log_value('train_accu2', train_accu2, epoch)
         log_value('val_accu2', val_accu2, epoch)
-        if contrastive:
-            log_value('contrastive loss', loss_contrastive, epoch)
-            log_value('contrastive acc', acc_contrastive, epoch)
         #####
 
         # print loss
@@ -184,12 +168,9 @@ try:
             print('[%s (%d %.1f%%)]' % (train_utils.time_since(START), epoch, float(epoch) / NUM_EPOCHS * 100))
             print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
             print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
-
-            if contrastive:
-                print('[%s %0.5f, %s %0.5f]'%('Contrastive Loss: ', loss_contrastive, 'Contrastive Accuracy: ', acc_contrastive))
         # save model if best validation loss
         if val_loss.item() < best_val_loss:
-            n = 'pc_contrastive_runs/' + NAME + '_best'
+            n = NAME + '_best'
             train_utils.save(n, perf_model)
             best_val_loss = val_loss.item()
             best_epoch = epoch
@@ -199,10 +180,10 @@ try:
         if best_epoch < epoch - 200:
             break
     print("Saving...")
-    train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
+    train_utils.save(NAME, perf_model)
 except KeyboardInterrupt:
     print("Saving before quit...")
-    train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
+    train_utils.save(NAME, perf_model)
 
 print('BEST R^2 VALUE: ' + str(best_valrsq))
 
@@ -218,10 +199,10 @@ filename = NAME + '_best'
 if torch.cuda.is_available():
     perf_model.cuda()
     #perf_model.load_state_dict(torch.load('/Users/michaelfarren/Desktop/MusicPerfAssessment-master/src/runs/' + filename + '.pt'))
-    perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + NAME))
+    perf_model.load_state_dict(torch.load('pc_runs/' + NAME))
 
 else:
-    perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + filename + '.pt', map_location=lambda storage, loc: storage))
+    perf_model.load_state_dict(torch.load('pc_runs/' + filename + '.pt', map_location=lambda storage, loc: storage))
 
 val_loss, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(perf_model, criterion, vef, METRIC, MTYPE, CTYPE)
 print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
