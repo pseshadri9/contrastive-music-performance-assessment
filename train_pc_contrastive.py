@@ -11,7 +11,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from models.PCConvNet import PCConvNet, PCConvNetCls
+from models.PCConvNet import PCConvNet, PCConvNetCls, PCConvNetContrastive
 from models.PCConvLstmNet import PCConvLstmNet, PCConvLstmNetCls
 from dataLoaders.PitchContourDataset import PitchContourDataset
 from dataLoaders.PitchContourDataloader import PitchContourDataloader
@@ -47,7 +47,7 @@ CTYPE = 0
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
 instrument = 'clarinet'
 cross_instrument = 'ALL'
-experiment = 'test-accu-cosine_dropout'
+experiment = 'classification_fc'
 METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
@@ -119,7 +119,7 @@ if MTYPE == 'conv':
     if BAND == 'mast':
         perf_model = PCConvNetCls(1)
     else:
-        perf_model = PCConvNet(0)
+        perf_model = PCConvNetContrastive(0)
 elif MTYPE == 'lstm':
     if BAND == 'mast':
         perf_model = PCConvLstmNetCls()
@@ -150,7 +150,7 @@ PRINT_EVERY = 1
 ADJUST_EVERY = 1000
 START = time.time()
 #best_val_loss = 1.0
-best_val_loss = .05
+best_loss_contrastive_val = .05
 best_valrsq = .20
 best_epoch = 0
 # train and validate
@@ -160,7 +160,8 @@ try:
         # perform training and validation
         train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
         if contrastive:
-            loss_contrastive, acc_contrastive = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
+            loss_contrastive_val, acc_contrastive_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
+            loss_contrastive_train, acc_contrastive_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE)
         # adjut learning rate
         # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
         # log data for visualization later
@@ -175,23 +176,26 @@ try:
         log_value('train_accu2', train_accu2, epoch)
         log_value('val_accu2', val_accu2, epoch)
         if contrastive:
-            log_value('contrastive loss', loss_contrastive, epoch)
-            log_value('contrastive acc', acc_contrastive, epoch)
+            log_value('Validation contrastive loss', loss_contrastive_val, epoch)
+            log_value('Validation contrastive acc', acc_contrastive_val, epoch)
+            log_value('Training contrastive loss', loss_contrastive_train)
+            log_value('Training constrastive acc', acc_contrastive_train)
         #####
 
         # print loss
         if epoch % PRINT_EVERY == 0:
             print('[%s (%d %.1f%%)]' % (train_utils.time_since(START), epoch, float(epoch) / NUM_EPOCHS * 100))
-            print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
-            print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
+            #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
+            #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
 
             if contrastive:
-                print('[%s %0.5f, %s %0.5f]'%('Contrastive Loss: ', loss_contrastive, 'Contrastive Accuracy: ', acc_contrastive))
+                print('[%s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train, 'Train Contrastive Accuracy: ', acc_contrastive_train))
+                print('[%s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val, 'Validation Contrastive Accuracy: ', acc_contrastive_val))
         # save model if best validation loss
-        if val_loss.item() < best_val_loss:
+        if loss_contrastive_val.item() < best_loss_contrastive_val:
             n = 'pc_contrastive_runs/' + NAME + '_best'
             train_utils.save(n, perf_model)
-            best_val_loss = val_loss.item()
+            best_loss_contrastive_val = loss_contrastive_val.item()
             best_epoch = epoch
         # store the best r-squared value from training
         if val_r_sq > best_valrsq:

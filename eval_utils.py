@@ -90,7 +90,13 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         mini_batch_size = model_input.size(0)
         if mtype == 'lstm':
             model.init_hidden(mini_batch_size)
-        model_output = model(model_input)
+        if model_input.shape[0] % 2 == 1:
+            model_input = model_input[:-1]
+            model_target = model_target[:-1]
+        half = model_input.shape[0] // 2
+        model_input1 = model_input[:half]
+        model_input2 = model_input[half:]
+        model_output = model(model_input1, model_input2)
         # compute loss
         loss = criterion(model_output, model_target)
         #loss_avg += loss.data[0]
@@ -101,9 +107,13 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         else:
             pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
         target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
+    ctype = 1
     if ctype == 1:
-        pred = nn.functional.softmax(pred).data
-        _, pred = torch.max(pred, 1) 
+        #pred = nn.functional.softmax(pred).data
+        #_, pred = torch.max(pred, 1) 
+        print(pred.shape)
+        pred = torch.argmax(model_output, dim=1)
+        print(pred.shape)
     r_sq, accu, accu2 = eval_regression(target.T.flatten(), pred)
     loss_avg /= num_batches
     if extra_outs:
@@ -206,7 +216,7 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
         _, pred = torch.max(pred, 1) 
     return pred, target
 
-def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0, classification = False):
+def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0, classification = True):
         model.eval()
         # intialize variables
         num_batches = len(data)
@@ -215,6 +225,7 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
         loss_avg = 0
         if classification:
             correct = 0
+            total = 0
         # iterate over batches for validation
         for batch_idx in range(1, num_batches + 1, 2):
             # extract pitch tensor and score for the batch
@@ -247,40 +258,29 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
             mini_batch_size = model_input.size(0)
             if mtype == 'lstm':
                 model.init_hidden(mini_batch_size)
-            conv_out1 = model.forward_conv(model_input)
-            model_output = model.forward(model_input, conv_out=conv_out1)
-            conv_out2 = model.forward_conv(model_input2)
-            model_output2 = model.forward(model_input2,conv_out=conv_out2)
-
-            conv_out = torch.cat((torch.mean(conv_out1, 2), torch.mean(conv_out2, 2)), 0)
+            #conv_out1 = model.forward_conv(model_input)
+            #conv_out2 = model.forward_conv(model_input2)
+            model_output1 = model.forward_once(model_input)
+            model_output2 = model.forward_once(model_input2)
             # compute loss
-            loss = criterion(model_output, torch.cat((model_target, model_target2), 0), conv_out)
+            loss = criterion(model_target, model_target2, model_output1, model_output2)
             #print(loss)
             #loss_avg += loss.data[0]
             loss_avg += loss.data
             # concatenate target and pred for computing validation metrics
             if ctype == 0:
-                pred = torch.cat((pred, model_output.data.view(-1)), 0) if pred.size else model_output.data.view(-1)
-                pred = torch.cat((pred, model_output2.data.view(-1)), 0) if pred.size else model_output2.data.view(-1)
+                #pred = torch.cat((pred, model_output.data.view(-1)), 0) if pred.size else model_output.data.view(-1)
+                #pred = torch.cat((pred, model_output2.data.view(-1)), 0) if pred.size else model_output2.data.view(-1)
+                pred = model.classifier(torch.cat((model_output1, model_output2), dim=0))
+                pred = torch.argmax(pred, dim=1)
+                #tt = criterion.label_map((torch.cat((model_target, model_target2), dim=0)))
+                correct_s = torch.sum(torch.eq(pred, criterion.label_map((torch.cat((model_target, model_target2), dim=0)).squeeze())).float())
+                correct += correct_s
+                total += pred.shape[0]
+                #print(correct.data, total)
             else:
                 pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
-            target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
-            target = torch.cat((target, score_tensor2), 0) if target.size else score_tensor2
-        if ctype == 1:
-            pred = nn.functional.softmax(pred).data
-            _, pred = torch.max(pred, 1) 
-        #r_sq, accu, accu2 = eval_regression(target.T.flatten(), pred)
-        #map predictions and targets to labels
-        Y_pred = criterion.label_map(pred)
-        Y_targ = criterion.label_map(target.T.flatten())
-        #print(Y_pred, Y_targ)
-        if torch.cuda.is_available():
-                Y_pred = Y_pred.cuda()
-                Y_targ = Y_targ.cuda()
-        #compare labels and compute accuracyd
-        Y_diff = torch.eq(Y_pred, Y_targ).float()
-        acc = torch.sum(Y_diff) / Y_diff.shape[0]
-        #print(acc, loss_avg)
+        acc = correct/total
         loss_avg /= num_batches
         return loss_avg, acc
 

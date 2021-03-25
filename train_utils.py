@@ -79,19 +79,28 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
         if mtype == 'lstm':
             model.init_hidden(mini_batch_size)
         #model_output = model(model_input)
-        conv_out = model.forward_conv(model_input)
-        model_output = model.forward(model_input, conv_out=conv_out)
+        if model_input.shape[0] % 2 == 1:
+            model_input = model_input[:-1]
+            model_target = model_target[:-1]
+        num = model_input.shape[0] // 2
+        model_input1 = model_input[:num]
+        model_input2 = model_input[num:]
+        model_target1 = model_target[:num]
+        model_target2 = model_target[num:]
+        #conv_out1 = model.forward_conv(model_input1)
+        #conv_out2 = model.forward_conv(model_input2)
+        model_output1 = model.forward_once(model_input1)
+        model_output2 = model.forward_once(model_input2)
         # compute loss
-        loss = criterion(model_output, model_target)
+        #loss = criterion(model_output, model_target)
         if contrastive:
             #print('model_output:', model_output.size(), 'targets', model_target.size())
             if strength:
                 mse_str, c_str = strength
             else:
                 mse_str, c_str = (1,1)
-            conv_out = torch.mean(conv_out, 2)
-            c_loss = contrastive(model_output, model_target, conv_out)
-            if mse_str == 0 and False:
+            c_loss = contrastive(model_target1, model_target2, model_output1, model_output2)
+            if mse_str == 0:
                 loss = c_loss
             else:
                 loss = mse_str*loss + c_str*c_loss
@@ -122,9 +131,9 @@ def train_and_validate(model, criterion, optimizer, train_data, val_data, metric
     # train the network
     train(model, criterion, optimizer, train_data, metric, mtype, ctype,contrastive=contrastive, strength=strength)   
     # evaluate the network on train data
-    train_loss_avg, train_r_sq, train_accu, train_accu2 = eval_utils.eval_model(model, criterion, train_data, metric, mtype, ctype)
+    train_loss_avg, train_r_sq, train_accu, train_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, train_data, metric, mtype, ctype)
     # evaluate the network on validation data
-    val_loss_avg, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(model, criterion, val_data, metric, mtype, ctype)
+    val_loss_avg, val_r_sq, val_accu, val_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, val_data, metric, mtype, ctype)
     # return values
     return train_loss_avg, train_r_sq, train_accu, train_accu2, val_loss_avg, val_r_sq, val_accu, val_accu2
 

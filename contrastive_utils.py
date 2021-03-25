@@ -13,14 +13,17 @@ class ContrastiveLoss(torch.nn.Module):
           
     """
 
-    def __init__(self, num_labels = 5):
+    def __init__(self, num_labels = 5, margin = 1.0):
         super(ContrastiveLoss, self).__init__()
         self.num_labels = num_labels
+        self.margin = margin
     
     # map each data point to a label corresponding to equal length section of the scores
     def label_map(self, x):
         label_width = float(1/self.num_labels)
-        return torch.floor(torch.div(x, label_width))
+        labels = torch.floor(torch.div(x, label_width))
+        labels[labels == 5.0] -= 1
+        return labels
 
     #euclidean vector distance
     def euclid(self, x, y):
@@ -36,30 +39,25 @@ class ContrastiveLoss(torch.nn.Module):
             dist = torch.diagonal(dist)
         return torch.div(dist, (x_mag * y_mag))
 
-    def forward(self, preds, targets, conv_out):
-        preds = torch.squeeze(preds)
-        targets = torch.squeeze(targets)
+    def forward(self, targets1, targets2, conv_out1, conv_out2):
+        targets1 = torch.squeeze(targets1)
+        targets2 = torch.squeeze(targets2)
 
-        # Use cosine similarity in scores as distance function 
-        #diff = self.cosine_sim(conv_out[:-1, :], conv_out[1:,:]) #torch.abs(targets[:-1] - targets[1:]) preds[:-1, :], preds[1:,:]
-        if conv_out.shape[0] % 2 == 1 and conv_out.shape[0] != 1:
-            conv_out = conv_out[1:, :]
-            targets = targets[1:]
-            preds = preds[1:]
-        elif conv_out.shape[0] == 1:
-            return torch.tensor(0)
-        diff = self.cosine_sim(conv_out[1::2, :], conv_out[::2,:])
+        # Use cosine similarity or euclidean in scores as distance function 
+        #print(conv_out1.shape, conv_out2.shape)
+        diff = self.euclid(conv_out1, conv_out2)
         dist_sq = torch.pow(diff, 2)
+
         #map predictions and targets to labels
-        Y_pred = self.label_map(preds)
-        Y_targ = self.label_map(targets)
+        Y_targ = self.label_map(targets1)
+        Y_targ2 = self.label_map(targets2)
         #compare labels and compute accuracyd
-        Y_diff = torch.eq(Y_pred, Y_targ).float()
-        acc = torch.sum(Y_diff) / Y_diff.shape[0]
+        #Y_diff = torch.eq(Y_pred, Y_targ).float()
+        #acc = torch.sum(Y_diff) / Y_diff.shape[0]
 
         #compare labels for contrastive pairs
-        Y_cont = torch.eq(Y_targ[1::2], Y_targ[::2]).long()
+        Y_cont = torch.eq(Y_targ, Y_targ2).long()
 
         #compute loss
-        loss = 0.5*(1 - Y_cont)*dist_sq + 0.5*Y_cont*torch.pow(torch.clamp(acc - diff, min=0.0), 2)
+        loss = 0.5*(1 - Y_cont)*dist_sq + 0.5*Y_cont*torch.pow(torch.clamp(self.margin - diff, min=0.0), 2)
         return torch.mean(loss)
