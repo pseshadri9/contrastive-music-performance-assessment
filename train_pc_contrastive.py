@@ -47,7 +47,7 @@ CTYPE = 0
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
 instrument = 'clarinet'
 cross_instrument = 'ALL'
-experiment = 'classification_fc'
+experiment = '5-classification_CE_Only-LR=0.001'
 METRIC = 0 # 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
@@ -58,12 +58,12 @@ NAME = '{0}_{1}_{2}_{3}_{4}'.format(BAND, instrument, metric_type[METRIC], INPUT
 
 #SET TRAINING CONSTANTS
 contrastive = True
-MSE_LOSS_STR = 0
-CONTR_LOSS_STR = 1
+MSE_LOSS_STR = 1
+CONTR_LOSS_STR = 0
 num_labels = 5
 classification = True
 #HYPERPARAMETERS
-LR_RATE = 0.0005 #0.01
+LR_RATE = 0.001 #0.01
 W_DECAY = 1e-5 #5e-4 #1e-5
 MOMENTUM = 0.9
 
@@ -119,7 +119,7 @@ if MTYPE == 'conv':
     if BAND == 'mast':
         perf_model = PCConvNetCls(1)
     else:
-        perf_model = PCConvNetContrastive(0)
+        perf_model = PCConvNetContrastive(0, num_classes=num_labels)
 elif MTYPE == 'lstm':
     if BAND == 'mast':
         perf_model = PCConvLstmNetCls()
@@ -133,6 +133,7 @@ else:
     criterion = nn.MSELoss()
 if contrastive:
     criterion_contrastive = ContrastiveLoss(num_labels=num_labels)
+    criterion = nn.CrossEntropyLoss()
 else:
     criterion_contrastive = None
 perf_optimizer = optim.SGD(perf_model.parameters(), lr= LR_RATE, momentum=MOMENTUM, weight_decay=W_DECAY)
@@ -150,9 +151,10 @@ PRINT_EVERY = 1
 ADJUST_EVERY = 1000
 START = time.time()
 #best_val_loss = 1.0
-best_loss_contrastive_val = .05
+best_loss_contrastive_val = float('inf')
 best_valrsq = .20
 best_epoch = 0
+best_acc_contrastive_val = float('inf')
 # train and validate
 try:
     print("Training for %d epochs..." % NUM_EPOCHS)
@@ -160,8 +162,8 @@ try:
         # perform training and validation
         train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
         if contrastive:
-            loss_contrastive_val, acc_contrastive_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
-            loss_contrastive_train, acc_contrastive_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE)
+            loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
+            loss_contrastive_train, acc_contrastive_train, ce_loss_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
         # adjut learning rate
         # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
         # log data for visualization later
@@ -177,9 +179,11 @@ try:
         log_value('val_accu2', val_accu2, epoch)
         if contrastive:
             log_value('Validation contrastive loss', loss_contrastive_val, epoch)
-            log_value('Validation contrastive acc', acc_contrastive_val, epoch)
-            log_value('Training contrastive loss', loss_contrastive_train)
-            log_value('Training constrastive acc', acc_contrastive_train)
+            log_value('Validation CrossEntropy Loss', ce_loss_val, epoch)
+            log_value('Validation acc', acc_contrastive_val, epoch)
+            log_value('Training contrastive loss', loss_contrastive_train, epoch)
+            log_value('Training CrossEntropy Loss', ce_loss_train, epoch)
+            log_value('Training acc', acc_contrastive_train, epoch)
         #####
 
         # print loss
@@ -189,18 +193,19 @@ try:
             #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
 
             if contrastive:
-                print('[%s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train, 'Train Contrastive Accuracy: ', acc_contrastive_train))
-                print('[%s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val, 'Validation Contrastive Accuracy: ', acc_contrastive_val))
-        # save model if best validation loss
-        if loss_contrastive_val.item() < best_loss_contrastive_val:
+                print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train,'Train CE Loss:', ce_loss_train, 'Train Accuracy: ', acc_contrastive_train))
+                print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
+        # save model if best validation accuracy
+        if acc_contrastive_val > best_acc_contrastive_val #loss_contrastive_val.item() < best_loss_contrastive_val:
             n = 'pc_contrastive_runs/' + NAME + '_best'
             train_utils.save(n, perf_model)
-            best_loss_contrastive_val = loss_contrastive_val.item()
+            best_acc_contrastive_val = acc_contrastive_val
+            #best_loss_contrastive_val = loss_contrastive_val.item()
             best_epoch = epoch
         # store the best r-squared value from training
         if val_r_sq > best_valrsq:
             best_valrsq = val_r_sq
-        if best_epoch < epoch - 200:
+        if best_epoch < epoch - 100:
             break
     print("Saving...")
     train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
@@ -212,8 +217,12 @@ print('BEST R^2 VALUE: ' + str(best_valrsq))
 
 # test
 # test of full length data
-test_loss, test_r_sq, test_accu, test_accu2 = eval_utils.eval_model(perf_model, criterion, testing_data, METRIC, MTYPE, CTYPE)
-print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Testing Loss: ', test_loss, ' R-sq: ', test_r_sq, ' Accu:', test_accu, test_accu2))
+if contrastive:
+    loss_contrastive_test, acc_contrastive_test, ce_loss_test = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, testing_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Testing Contrastive Loss: ', loss_contrastive_test,'Testing CE Loss:', ce_loss_test, 'Testing Accuracy: ', acc_contrastive_test))
+else:
+    test_loss, test_r_sq, test_accu, test_accu2 = eval_utils.eval_model(perf_model, criterion, testing_data, METRIC, MTYPE, CTYPE)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Testing Loss: ', test_loss, ' R-sq: ', test_r_sq, ' Accu:', test_accu, test_accu2))
 
 # validate and test on best validation model
 # read the model
@@ -222,13 +231,20 @@ filename = NAME + '_best'
 if torch.cuda.is_available():
     perf_model.cuda()
     #perf_model.load_state_dict(torch.load('/Users/michaelfarren/Desktop/MusicPerfAssessment-master/src/runs/' + filename + '.pt'))
-    perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + NAME))
-
+    perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + filename + '.pt'))
 else:
     perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + filename + '.pt', map_location=lambda storage, loc: storage))
 
-val_loss, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(perf_model, criterion, vef, METRIC, MTYPE, CTYPE)
-print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
+if contrastive:
+    loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
+else:
+    val_loss, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(perf_model, criterion, vef, METRIC, MTYPE, CTYPE)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
 
-test_loss, test_r_sq, test_accu, test_accu2 = eval_utils.eval_model(perf_model, criterion, testing_data, METRIC, MTYPE, CTYPE)
-print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Testing Loss: ', test_loss, ' R-sq: ', test_r_sq, ' Accu:', test_accu, test_accu2))
+if contrastive:
+    loss_contrastive_test, acc_contrastive_test, ce_loss_test = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, testing_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Testing Contrastive Loss: ', loss_contrastive_test,'Testing CE Loss:', ce_loss_test, 'Testing Accuracy: ', acc_contrastive_test))
+else:
+    test_loss, test_r_sq, test_accu, test_accu2 = eval_utils.eval_model(perf_model, criterion, testing_data, METRIC, MTYPE, CTYPE)
+    print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Testing Loss: ', test_loss, ' R-sq: ', test_r_sq, ' Accu:', test_accu, test_accu2))

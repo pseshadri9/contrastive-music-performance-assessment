@@ -22,8 +22,8 @@ class ContrastiveLoss(torch.nn.Module):
     def label_map(self, x):
         label_width = float(1/self.num_labels)
         labels = torch.floor(torch.div(x, label_width))
-        labels[labels == 5.0] -= 1
-        return labels
+        labels[labels == self.num_labels] -= 1
+        return labels.long()
 
     #euclidean vector distance
     def euclid(self, x, y):

@@ -100,8 +100,11 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
             else:
                 mse_str, c_str = (1,1)
             c_loss = contrastive(model_target1, model_target2, model_output1, model_output2)
+            loss = criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
             if mse_str == 0:
                 loss = c_loss
+            elif c_str == 0:
+                loss = loss
             else:
                 loss = mse_str*loss + c_str*c_loss
         # compute backward pass and step

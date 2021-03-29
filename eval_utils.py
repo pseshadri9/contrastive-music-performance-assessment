@@ -216,13 +216,14 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
         _, pred = torch.max(pred, 1) 
     return pred, target
 
-def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0, classification = True):
+def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_outs = 0, classification = True, criterion_CE = None):
         model.eval()
         # intialize variables
         num_batches = len(data)
         pred = np.array([])
         target = np.array([])
         loss_avg = 0
+        ce_loss_avg = 0
         if classification:
             correct = 0
             total = 0
@@ -264,6 +265,9 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
             model_output2 = model.forward_once(model_input2)
             # compute loss
             loss = criterion(model_target, model_target2, model_output1, model_output2)
+            if criterion_CE:
+                ce_loss = criterion_CE(model_output1, criterion.label_map(model_target.squeeze(dim=1))) + criterion_CE(model_output2, criterion.label_map(model_target2.squeeze(dim=1)))
+                ce_loss_avg += ce_loss.data
             #print(loss)
             #loss_avg += loss.data[0]
             loss_avg += loss.data
@@ -282,5 +286,6 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
                 pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
         acc = correct/total
         loss_avg /= num_batches
-        return loss_avg, acc
+        ce_loss_avg /= num_batches
+        return loss_avg, acc, ce_loss_avg
 
