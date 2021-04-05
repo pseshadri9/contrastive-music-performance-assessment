@@ -388,7 +388,7 @@ class PCConvNetContrastive(nn.Module):
 	 pitch contours as input
     """
 
-    def __init__(self, mode, num_classes = 5):
+    def __init__(self, mode, num_classes = 5, regression = False):
         """
         Initializes the class with internal parameters for the different layers
         Args:
@@ -402,8 +402,12 @@ class PCConvNetContrastive(nn.Module):
             self.n0_features = 4
             self.n1_features = 8
             self.n2_features = 16
-            self.num_classes = num_classes
-            self.classifier = nn.Softmax(dim=1)
+            if regression:
+                self.num_classes = 1
+                self.classifier = nn.Sigmoid()
+            else:
+                self.num_classes = num_classes
+                self.classifier = nn.Softmax(dim=1)
             # define the different convolutional modules
             self.conv = nn.Sequential(
                     # define the 1st convolutional layer
@@ -439,7 +443,7 @@ class PCConvNetContrastive(nn.Module):
             conv_out = self.forward_conv(input)
         # compute final output
         final_output = self.fc(conv_out)
-        return final_output
+        return final_output if not regression else self.classifier(final_output)
 
 
     def forward(self, input1, input2, conv_out = None):
