@@ -83,20 +83,24 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
             model_input = model_input[:-1]
             model_target = model_target[:-1]
         num = model_input.shape[0] // 2
-        model_input1 = model_input[:num]
-        model_input2 = model_input[num:]
-        model_target1 = model_target[:num]
-        model_target2 = model_target[num:]
+        r1=torch.randperm(num)
+        r2=torch.randperm(num)
+        model_input1 = model_input[:num][r1]
+        model_input2 = model_input[num:][r2]
+        model_target1 = model_target[:num][r1]
+        model_target2 = model_target[num:][r2]
         #conv_out1 = model.forward_conv(model_input1)
         #conv_out2 = model.forward_conv(model_input2)
         if encoder:
             model_output1 = model.forward_conv(model_input1)
             model_output2 = model.forward_conv(model_input2)
             loss = contrastive(model_target1, model_target2, model_output1, model_output2)
+            loss += criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
         else:
             model_output1 = model.forward_once(model_input1)
             model_output2 = model.forward_once(model_input2)
-            loss = criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
+            loss = contrastive(model_target1, model_target2, model_output1, model_output2) + criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
+            
         # compute loss
         #loss = criterion(model_output, model_target)
         """ if contrastive:

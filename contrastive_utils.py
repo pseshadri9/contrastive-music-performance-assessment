@@ -59,5 +59,5 @@ class ContrastiveLoss(torch.nn.Module):
         Y_cont = torch.eq(Y_targ, Y_targ2).long()
 
         #compute loss
-        loss = 0.5*(1 - Y_cont)*dist_sq + 0.5*Y_cont*torch.pow(torch.clamp(self.margin - diff, min=0.0), 2)
-        return torch.sum(loss)
+        loss = 0.5*(Y_cont)*dist_sq + 0.5*(1 - Y_cont)*torch.pow(torch.clamp(self.margin - diff, min=0.0), 2)
+        return torch.mean(loss)

@@ -397,6 +397,7 @@ class PCConvNetContrastive(nn.Module):
         super(PCConvNetContrastive, self).__init__()
         if mode == 0: # for minimum input size of 1000
             # initialize model internal parameters
+            self.regression = regression
             self.kernel_size = 7
             self.stride = 3
             self.n0_features = 4
@@ -428,7 +429,8 @@ class PCConvNetContrastive(nn.Module):
             #Fully Connected Layer
             self.fc = nn.Sequential(
                     nn.Linear(self.n2_features, self.n2_features),
-                    nn.Linear(self.n2_features, self.num_classes))
+                    nn.Linear(self.n2_features, self.n2_features//2),
+                    nn.Linear(self.n2_features//2, self.num_classes))
     def forward_conv(self, input):
         # get mini batch size from input and reshape
         mini_batch_size, sig_size = input.size()
@@ -443,7 +445,7 @@ class PCConvNetContrastive(nn.Module):
             conv_out = self.forward_conv(input)
         # compute final output
         final_output = self.fc(conv_out)
-        return final_output if not regression else self.classifier(final_output)
+        return final_output if not self.regression else self.classifier(final_output)
 
 
     def forward(self, input1, input2, conv_out = None):
