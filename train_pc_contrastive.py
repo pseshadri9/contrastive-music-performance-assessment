@@ -36,8 +36,8 @@ if CUDA_AVAILABLE != True:
 
 # initialize training parameters
 RUN = 110
-NUM_EPOCHS = 350 #250 #2000
-NUM_CLASSIFIER_EPOCH = 250
+NUM_EPOCHS = 150 #2000
+NUM_CLASSIFIER_EPOCH = 300
 NUM_BATCHES = 10
 SEGMENT = '2'
 MTYPE = 'conv'
@@ -48,7 +48,7 @@ CTYPE = 0
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
 instrument = 'clarinet'
 cross_instrument = 'ALL'
-experiment = '3_FC2_CE2'
+experiment = 'mixed'
 METRIC = 0# 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
@@ -57,14 +57,19 @@ NOISE_SHAPE = 'triangular'  #triangular, normal, or uniform
 INPUT_REP = 'Cepstrum'
 
 #SET TRAINING CONSTANTS
+split_train = False
+earlystop = True
 contrastive = True
+Skip_encoder = True
 MSE_LOSS_STR = 1
 CONTR_LOSS_STR = 0
 num_labels = 5
-classification = True
+margin = 0.5
+classification = False
 model_type = 'reg' if not classification else str(num_labels)+'class'
 #HYPERPARAMETERS
-LR_RATE = 0.001 #0.01
+LR_RATE = 0.005 #0.01
+LR_RATE_enc = 0.005
 W_DECAY = 1e-5 #5e-4 #1e-5
 MOMENTUM = 0.9
 NAME = '{0}_{1}_{2}_{3}_{4}_{5}'.format(BAND, instrument, metric_type[METRIC], INPUT_REP, model_type,  experiment)
@@ -134,7 +139,7 @@ if BAND == 'mast':
 else:
     criterion = nn.MSELoss()
 if contrastive:
-    criterion_contrastive = ContrastiveLoss(num_labels=num_labels)
+    criterion_contrastive = ContrastiveLoss(margin=margin, num_labels=num_labels)
     if classification:
         criterion = nn.CrossEntropyLoss()
     else:
@@ -163,72 +168,81 @@ best_ce_loss_val = float('inf')
 # train and validate
 try:
     print("Training Encoder for %d epochs..." % NUM_EPOCHS)
-    for epoch in range(1, NUM_EPOCHS + 1):
-        # perform training and validation
-        train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
-        if contrastive:
-            loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
-            loss_contrastive_train, acc_contrastive_train, ce_loss_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
-        # adjut learning rate
-        # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
-        # log data for visualization later
-        '''
-        else:
-        ####
-            log_value('train_loss', train_loss, epoch)
-            log_value('val_loss', val_loss, epoch)
-            log_value('train_r_sq', train_r_sq, epoch)
-            log_value('val_r_sq', val_r_sq, epoch)
-            log_value('train_accu', train_accu, epoch)
-            log_value('val_accu', val_accu, epoch)
-            log_value('train_accu2', train_accu2, epoch)
-            log_value('val_accu2', val_accu2, epoch)
-            '''
-        if contrastive:
-            log_value('Validation contrastive loss', loss_contrastive_val, epoch)
-            #log_value('Validation CrossEntropy Loss', ce_loss_val, epoch)
-            #log_value('Validation acc', acc_contrastive_val, epoch)
-            log_value('Training contrastive loss', loss_contrastive_train, epoch)
-            #log_value('Training CrossEntropy Loss', ce_loss_train, epoch)
-            #log_value('Training acc', acc_contrastive_train, epoch)
-        #####
-
-        # print loss
-        if epoch % PRINT_EVERY == 0:
-            print('[%s (%d %.1f%%)]' % (train_utils.time_since(START), epoch, float(epoch) / NUM_EPOCHS * 100))
-            #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
-            #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
-
+    if not Skip_encoder:
+        for epoch in range(1, NUM_EPOCHS + 1):
+            # perform training and validation
+            train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE, contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR))
             if contrastive:
-                #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train,'Train CE Loss:', ce_loss_train, 'Train Accuracy: ', acc_contrastive_train))
-                #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
-                print('[%s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train))
-                print('[%s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val))
-        # save model if best validation accuracy
-        if loss_contrastive_val.item() < best_loss_contrastive_val: #acc_contrastive_val > best_acc_contrastive_val: #
-            n = 'pc_contrastive_runs/' + NAME + '_best'
-            train_utils.save(n, perf_model)
-            #best_acc_contrastive_val = acc_contrastive_val
-            best_loss_contrastive_val = loss_contrastive_val.item()
-            best_epoch = epoch
-        # store the best r-squared value from training
-        if val_r_sq > best_valrsq:
-            best_valrsq = val_r_sq
-        if best_epoch < epoch - 75:
-            break
+                print('Evaluating')
+                #print(eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion))
+                loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE)
+                loss_contrastive_train, acc_contrastive_train, ce_loss_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE)
+            # adjut learning rate
+            # train_utils.adjust_learning_rate(perf_optimizer, epoch, ADJUST_EVERY)
+            # log data for visualization later
+            '''
+            else:
+            ####
+                log_value('train_loss', train_loss, epoch)
+                log_value('val_loss', val_loss, epoch)
+                log_value('train_r_sq', train_r_sq, epoch)
+                log_value('val_r_sq', val_r_sq, epoch)
+                log_value('train_accu', train_accu, epoch)
+                log_value('val_accu', val_accu, epoch)
+                log_value('train_accu2', train_accu2, epoch)
+                log_value('val_accu2', val_accu2, epoch)
+                '''
+            if contrastive:
+                log_value('Validation contrastive loss', loss_contrastive_val, epoch)
+                #log_value('Validation CrossEntropy Loss', ce_loss_val, epoch)
+                #log_value('Validation acc', acc_contrastive_val, epoch)
+                log_value('Training contrastive loss', loss_contrastive_train, epoch)
+                #log_value('Training CrossEntropy Loss', ce_loss_train, epoch)
+                #log_value('Training acc', acc_contrastive_train, epoch)
+            #####
 
+            # print loss
+            if epoch % PRINT_EVERY == 0:
+                print('[%s (%d %.1f%%)]' % (train_utils.time_since(START), epoch, float(epoch) / NUM_EPOCHS * 100))
+                #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
+                #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
+
+                if contrastive:
+                    #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train,'Train CE Loss:', ce_loss_train, 'Train Accuracy: ', acc_contrastive_train))
+                    #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
+                    print('[%s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train))
+                    print('[%s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val))
+            # save model if best validation accuracy
+            if loss_contrastive_val.item() < best_loss_contrastive_val: #acc_contrastive_val > best_acc_contrastive_val: #
+                n = 'pc_contrastive_runs/' + NAME + '_best'
+                train_utils.save(n, perf_model)
+                #best_acc_contrastive_val = acc_contrastive_val
+                best_loss_contrastive_val = loss_contrastive_val.item()
+                best_epoch = epoch
+            # store the best r-squared value from training
+            if val_r_sq > best_valrsq:
+                best_valrsq = val_r_sq
+            if best_epoch < epoch - 250 and earlystop:
+                break
+        
+        train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
+    else:
+        try:
+            perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + NAME))
+        except:
+            pass 
     print("Training Classifier for %d epochs..." % NUM_CLASSIFIER_EPOCH)
+    if split_train:
+        for param in perf_model.conv.parameters():
+                param.requires_grad = False
 
-    for param in perf_model.conv.parameters():
-        param.requires_grad = False
-
-    perf_optimizer = optim.SGD(perf_model.parameters(), lr= LR_RATE, momentum=MOMENTUM, weight_decay=W_DECAY)
+    perf_optimizer = optim.SGD(perf_model.parameters(), lr= LR_RATE_enc, momentum=MOMENTUM, weight_decay=W_DECAY)
     
     for epoch in range(1, NUM_CLASSIFIER_EPOCH + 1):
         # perform training and validation
         train_loss, train_r_sq, train_accu, train_accu2, val_loss, val_r_sq, val_accu, val_accu2 = train_utils.train_and_validate(perf_model, criterion, perf_optimizer, aug_training_data, aug_validation_data, METRIC, MTYPE, CTYPE,
-            contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR), encoder=False)
-        if contrastive:
+            contrastive=criterion_contrastive, strength=(MSE_LOSS_STR, CONTR_LOSS_STR), encoder=False, classification= classification)
+        if classification:
             loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
             loss_contrastive_train, acc_contrastive_train, ce_loss_train = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, aug_training_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
         # adjut learning rate
@@ -259,30 +273,36 @@ try:
             #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
             #print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
 
-            if contrastive:
+            if classification:
                 #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Train Contrastive Loss: ', loss_contrastive_train,'Train CE Loss:', ce_loss_train, 'Train Accuracy: ', acc_contrastive_train))
                 #print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
                 print('[%s %0.5f, %s %0.5f]'%('Train CE Loss:', ce_loss_train, 'Train Accuracy: ', acc_contrastive_train))
                 print('[%s %0.5f, %s %0.5f]'%('Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
+            else:
+                print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Train Loss: ', train_loss, ' R-sq: ', train_r_sq, ' Accu:', train_accu, train_accu2))
+                print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
         # save model if best validation accuracy
-        if ce_loss_val < ce_loss_val: #loss_contrastive_val.item() < best_loss_contrastive_val:
+        loss_epoch = ce_loss_val if classification else val_loss
+        if loss_epoch < best_ce_loss_val: #loss_contrastive_val.item() < best_loss_contrastive_val:
             n = 'pc_contrastive_runs/' + NAME + '_best'
             train_utils.save(n, perf_model)
-            best_acc_contrastive_val = acc_contrastive_val
+            best_ce_loss_val = loss_epoch
             #best_loss_contrastive_val = loss_contrastive_val.item()
             best_epoch = epoch
         # store the best r-squared value from training
         if val_r_sq > best_valrsq:
             best_valrsq = val_r_sq
-        if best_epoch < epoch - 75:
+        if best_epoch < epoch - 100 and earlystop:
             break
     print("Saving...")
     train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
 except KeyboardInterrupt:
     print("Saving before quit...")
     train_utils.save('pc_contrastive_runs/'+NAME, perf_model)
-
-print('BEST R^2 VALUE: ' + str(acc_contrastive_val.data))
+if classification:
+    print('BEST Accuracy: ' + str(acc_contrastive_val.data))
+else:
+    print('BEST R^2 VALUE: ' + str(best_valrsq))
 
 # test
 # test of full length data

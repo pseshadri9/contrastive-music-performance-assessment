@@ -425,6 +425,7 @@ class PCConvNetContrastive(nn.Module):
                     nn.Conv1d(self.n1_features, self.n2_features, self.kernel_size, self.stride), # output is (109 - 7)/3 + 1 = 35
                     nn.BatchNorm1d(self.n2_features),
                     nn.ReLU()
+                    #nn.Dropout(0.15)
                 )
             #Fully Connected Layer
             self.fc = nn.Sequential(

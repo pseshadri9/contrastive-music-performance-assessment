@@ -35,7 +35,7 @@ def augment_data(data):
     aug_data = data + aug_data
     return aug_data
 
-def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=None, strength = None, encoder = True):
+def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=None, strength = None, encoder = True, classification = True):
     """
     Returns the model performance metrics
     Args:
@@ -95,11 +95,17 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
             model_output1 = model.forward_conv(model_input1)
             model_output2 = model.forward_conv(model_input2)
             loss = contrastive(model_target1, model_target2, model_output1, model_output2)
-            loss += criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
+            #loss += criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
         else:
             model_output1 = model.forward_once(model_input1)
             model_output2 = model.forward_once(model_input2)
-            loss = contrastive(model_target1, model_target2, model_output1, model_output2) + criterion(model_output1, contrastive.label_map(model_target1.squeeze())) + criterion(model_output2, contrastive.label_map(model_target2.squeeze()))
+            if classification:
+                t1 = contrastive.label_map(model_target1.squeeze())
+                t2 = contrastive.label_map(model_target2.squeeze())
+            else: 
+                t1 = model_target1
+                t2 = model_target2
+            loss = criterion(model_output1, t1) + criterion(model_output2, t2) + contrastive(model_target1, model_target2, model.forward_conv(model_input1), model.forward_conv(model_input2))
             
         # compute loss
         #loss = criterion(model_output, model_target)
@@ -128,7 +134,7 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
 
 
 # define training and validate method
-def train_and_validate(model, criterion, optimizer, train_data, val_data, metric, mtype, ctype = 0, contrastive=None, strength=None, encoder = True):
+def train_and_validate(model, criterion, optimizer, train_data, val_data, metric, mtype, ctype = 0, contrastive=None, strength=None, encoder = True, classification = True):
     """
     Defines the training and validation cycle for the input batched data for the conv model
     Args:
@@ -142,11 +148,17 @@ def train_and_validate(model, criterion, optimizer, train_data, val_data, metric
         ctype:          int, 0 for regression, 1 for classification
     """
     # train the network
-    train(model, criterion, optimizer, train_data, metric, mtype, ctype,contrastive=contrastive, strength=strength, encoder=encoder)   
+    train(model, criterion, optimizer, train_data, metric, mtype, ctype,contrastive=contrastive, strength=strength, encoder=encoder, classification= classification)   
     # evaluate the network on train data
-    train_loss_avg, train_r_sq, train_accu, train_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, train_data, metric, mtype, ctype)
+    if classification:
+        train_loss_avg, train_r_sq, train_accu, train_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, train_data, metric, mtype, ctype)
+    else:
+        train_loss_avg, train_r_sq, train_accu, train_accu2 = eval_utils.eval_model(model, criterion, train_data, metric, mtype, ctype)
     # evaluate the network on validation data
-    val_loss_avg, val_r_sq, val_accu, val_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, val_data, metric, mtype, ctype)
+    if classification:
+        val_loss_avg, val_r_sq, val_accu, val_accu2 = (0,0,0,0) #eval_utils.eval_model(model, criterion, val_data, metric, mtype, ctype)
+    else:
+        val_loss_avg, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(model, criterion, val_data, metric, mtype, ctype)
     # return values
     return train_loss_avg, train_r_sq, train_accu, train_accu2, val_loss_avg, val_r_sq, val_accu, val_accu2
 
