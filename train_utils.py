@@ -58,8 +58,8 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
         model.zero_grad()
         loss = 0
         # extract pitch tensor and score for the batch
-        pitch_tensor = data[batch_idx]['pitch_tensor']
-        score_tensor = data[batch_idx]['score_tensor'][:, metric]
+        pitch_tensor = torch.Tensor(data[batch_idx]['pitch_tensor'])
+        score_tensor = torch.Tensor(data[batch_idx]['score_tensor'][:, metric])
         # prepare data for input to model
         model_input = pitch_tensor.clone()
         model_target = score_tensor.clone()
@@ -89,6 +89,8 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
         model_input2 = model_input[num:][r2]
         model_target1 = model_target[:num][r1]
         model_target2 = model_target[num:][r2]
+        if model_input1.shape[1] == 0 or model_input2.shape[1] == 0:
+            continue
         #conv_out1 = model.forward_conv(model_input1)
         #conv_out2 = model.forward_conv(model_input2)
         if encoder:
@@ -99,13 +101,19 @@ def train(model, criterion, optimizer, data, metric, mtype, ctype, contrastive=N
         else:
             model_output1 = model.forward_once(model_input1)
             model_output2 = model.forward_once(model_input2)
+            try:
+                #model_output1 = model.forward_once(model_input)
+                ggg = 2
+            except:
+                continue
             if classification:
                 t1 = contrastive.label_map(model_target1.squeeze())
                 t2 = contrastive.label_map(model_target2.squeeze())
             else: 
                 t1 = model_target1
                 t2 = model_target2
-            loss = criterion(model_output1, t1) + criterion(model_output2, t2) + contrastive(model_target1, model_target2, model.forward_conv(model_input1), model.forward_conv(model_input2))
+                ggg = 2
+            loss = criterion(model_output1, t1) + criterion(model_output2, t2) #+ contrastive(model_target1, model_target2, model.forward_conv(model_input1), model.forward_conv(model_input2))
             
         # compute loss
         #loss = criterion(model_output, model_target)

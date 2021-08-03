@@ -46,10 +46,10 @@ CTYPE = 0
 
 #SET CONSTANTS
 metric_type = {0:'musicality', 1:'note accuracy',2:'Rhythm Accuracy',3:'tonality'}
-instrument = 'clarinet'
+instrument = 'ALL'
 cross_instrument = 'ALL'
-experiment = 'mixed'
-METRIC = 0# 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
+experiment = 'paper-results'
+METRIC = 2# 0: Musicality, 1: Note Accuracy, 2: Rhythmic Accuracy, 3: Tone Quality
 BAND = 'middle'
 ADD_NOISE_TEST = False
 ADD_NOISE_VALID = False
@@ -324,14 +324,14 @@ if torch.cuda.is_available():
 else:
     perf_model.load_state_dict(torch.load('pc_contrastive_runs/' + filename + '.pt', map_location=lambda storage, loc: storage))
 
-if contrastive:
+if contrastive and classification:
     loss_contrastive_val, acc_contrastive_val, ce_loss_val = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, vef, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
     print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Validation Contrastive Loss: ', loss_contrastive_val,'Validation CE Loss:', ce_loss_val, 'Validation Accuracy: ', acc_contrastive_val))
 else:
     val_loss, val_r_sq, val_accu, val_accu2 = eval_utils.eval_model(perf_model, criterion, vef, METRIC, MTYPE, CTYPE)
     print('[%s %0.5f, %s %0.5f, %s %0.5f %0.5f]'% ('Valid Loss: ', val_loss, ' R-sq: ', val_r_sq, ' Accu:', val_accu, val_accu2))
 
-if contrastive:
+if contrastive and classification:
     loss_contrastive_test, acc_contrastive_test, ce_loss_test = eval_utils.eval_acc_contrastive(perf_model, criterion_contrastive, testing_data, METRIC, MTYPE, CTYPE, criterion_CE=criterion)
     print('[%s %0.5f, %s %0.5f, %s %0.5f]'%('Testing Contrastive Loss: ', loss_contrastive_test,'Testing CE Loss:', ce_loss_test, 'Testing Accuracy: ', acc_contrastive_test))
 else:

@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from sklearn import metrics
 from contrastive_utils import ContrastiveLoss
+from models.PCConvNet import PCConvNet, PCConvNetCls, PCConvNetContrastive
 
 """
 Contains standard utility functions for training and testing evaluations
@@ -70,8 +71,8 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
     # iterate over batches for validation
     for batch_idx in range(num_batches):
         # extract pitch tensor and score for the batch
-        pitch_tensor = data[batch_idx]['pitch_tensor']
-        score_tensor = data[batch_idx]['score_tensor'][:, metric]
+        pitch_tensor = torch.Tensor(data[batch_idx]['pitch_tensor'])
+        score_tensor = torch.Tensor(data[batch_idx]['score_tensor'][:, metric])
         #score_tensor = torch.unsqueeze(score_tensor, 1)
         # prepare data for input to model
         model_input = pitch_tensor.clone()
@@ -97,7 +98,14 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         #half = model_input.shape[0] // 2
         #model_input1 = model_input[:half]
         #model_input2 = model_input[half:]
-        model_output = model.forward_once(model_input)
+        try:
+            if type(model) is PCConvNetContrastive:
+                model_output = model.forward_once(model_input) # FORWARD ONCE
+            else:
+                model_output = model.forward(model_input)
+        except Exception as  e:
+            print(e)
+            continue
         # compute loss
         loss = criterion(model_output, model_target)
         #loss_avg += loss.data[0]
@@ -108,6 +116,7 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         else:
             pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
         target = torch.cat((target, model_target), 0) if target.size else model_target
+        #print(model_output.shape,pred.shape, target.shape, model_target.shape)
     #ctype = 1
     if ctype == 1:
         #pred = nn.functional.softmax(pred).data
@@ -115,6 +124,7 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         print(score_tensor.shape)
         pred = torch.argmax(model_output, dim=1)
         print(pred.shape)
+    #print(model_output.shape, pred.shape)
     r_sq, accu, accu2 = eval_regression(target.T.flatten(), pred)
     loss_avg /= num_batches
     if extra_outs:
@@ -173,7 +183,7 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
         # extract pitch tensor and score for the batch
         pitch_tensor = data[batch_idx]['pitch_tensor']
         score_tensor = data[batch_idx]['score_tensor'][:, metric]
-        #score_tensor = torch.unsqueeze(score_tensor, 1)
+        score_tensor = torch.unsqueeze(score_tensor, 1)
         # prepare data for input to model
         model_input = pitch_tensor.clone()
         model_target = score_tensor.clone()
@@ -194,7 +204,10 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
         if latent:
             model_output = model.forward_conv(model_input, latent_test = True)
         else:
-            model_output = model(model_input)
+            if type(model) is PCConvNet:
+                model_output = torch.mean(model.forward_conv(model_input), 2)
+            else:
+                model_output = model.forward_conv(model_input)
         # compute loss
         if not latent:
             loss = criterion(model_output, model_target)
@@ -208,7 +221,7 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
                 print(pred.size())
             pred = torch.cat((pred, model_output.data), dim=0) if pred.size else model_output.data
         elif ctype == 0:
-            pred = torch.cat((pred, model_output.data.view(-1)), 0) if pred.size else model_output.data.view(-1)
+            pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
         else:
             pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
         target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
@@ -232,11 +245,11 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
         # iterate over batches for validation
         for batch_idx in range(1, num_batches - 1, 2):
             # extract pitch tensor and score for the batch
-            pitch_tensor = data[batch_idx]['pitch_tensor']
-            score_tensor = data[batch_idx]['score_tensor'][:, metric]
+            pitch_tensor = torch.Tensor(data[batch_idx]['pitch_tensor'])
+            score_tensor = torch.Tensor(data[batch_idx]['score_tensor'][:, metric])
             score_tensor = torch.unsqueeze(score_tensor, 1)
-            pitch_tensor2 = data[batch_idx-1]['pitch_tensor']
-            score_tensor2 = data[batch_idx-1]['score_tensor'][:, metric]
+            pitch_tensor2 = torch.Tensor(data[batch_idx-1]['pitch_tensor'])
+            score_tensor2 = torch.Tensor(data[batch_idx-1]['score_tensor'][:, metric])
             score_tensor2 = torch.unsqueeze(score_tensor2, 1)
             # prepare data for input to model
             model_input = pitch_tensor.clone()
@@ -261,12 +274,17 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
             mini_batch_size = model_input.size(0)
             if mtype == 'lstm':
                 model.init_hidden(mini_batch_size)
-            conv_out1 = model.forward_conv(model_input)
-            conv_out2 = model.forward_conv(model_input2)
-            model_output1 = model.forward_once(model_input)
-            model_output2 = model.forward_once(model_input2)
+            try:
+                conv_out1 = model.forward_conv(model_input)
+                conv_out2 = model.forward_conv(model_input2)
+                model_output1 = model.forward_once(model_input)
+                model_output2 = model.forward_once(model_input2)
+            except Exception as e:
+                print(e)
+                continue
             # compute loss
-            loss = criterion(model_target, model_target2, model_output1, model_output2)
+            #print(model_target2.shape, conv_out2.shape)
+            loss = criterion(model_target, model_target2, conv_out1, conv_out2)
             if criterion_CE:
                 ce_loss = criterion_CE(model_output1, criterion.label_map(model_target.squeeze(dim=1))) + criterion_CE(model_output2, criterion.label_map(model_target2.squeeze(dim=1)))
                 ce_loss_avg += ce_loss.data
@@ -278,9 +296,9 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
                 #print(conv_out1.shape)
                 if preds_out is None and preds:
                     #print(preds_out.shape)
-                    preds_out = torch.cat((conv_out1, conv_out2), dim=0)
+                    preds_out = torch.cat((model_output1, model_output2), dim=0)
                 elif preds:
-                    conv = torch.cat((conv_out1, conv_out2), dim=0)
+                    conv = torch.cat((model_output1, model_output2), dim=0)
                     preds_out = torch.cat((preds_out, conv), dim=0)
                 #print(preds_out.shape)
                 target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
