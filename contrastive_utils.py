@@ -51,10 +51,7 @@ class ContrastiveLoss(torch.nn.Module):
         #map predictions and targets to labels
         Y_targ = self.label_map(targets1)
         Y_targ2 = self.label_map(targets2)
-        #compare labels and compute accuracyd
-        #Y_diff = torch.eq(Y_pred, Y_targ).float()
-        #acc = torch.sum(Y_diff) / Y_diff.shape[0]
-
+        
         #compare labels for contrastive pairs
         Y_cont = torch.eq(Y_targ, Y_targ2).long()
 

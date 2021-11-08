@@ -25,50 +25,26 @@ class PCConvNet(nn.Module):
             self.n1_features = 8
             self.n2_features = 16
             # define the different convolutional modules
-            if False:
-                self.conv = nn.Sequential(
-                    # define the 1st convolutional layer
-                    nn.Conv1d(1, self.n0_features, self.kernel_size, self.stride),# output is (1000 - 7)/3 + 1 = 332
-                    nn.BatchNorm1d(self.n0_features),
-                    nn.ReLU(),
-                    #nn.Dropout(),
-                    # define the 2nd convolutional layer
-                    nn.Conv1d(self.n0_features, self.n1_features, self.kernel_size, self.stride), # output is (332 - 7)/3 + 1 = 109
-                    nn.BatchNorm1d(self.n1_features),
-                    nn.ReLU(),
-                    #nn.Dropout(),
-                    # define the 3rd convolutional layer
-                    nn.Conv1d(self.n1_features, self.n2_features, self.kernel_size, self.stride), # output is (109 - 7)/3 + 1 = 35
-                    nn.BatchNorm1d(self.n2_features),
-                    nn.ReLU(),
-                    #nn.Dropout(),
-                    # define the final fully connected layer (fully convolutional)
-                    nn.Conv1d(self.n2_features, 1, 35, 1),
-                    nn.BatchNorm1d(1),
-                    nn.ReLU(),
-                    #nn.Dropout()
-                )
-            else:
-                self.conv = nn.Sequential(
-                    # define the 1st convolutional layer
-                    nn.Conv1d(1, self.n0_features, self.kernel_size, self.stride),# output is (1000 - 7)/3 + 1 = 332
-                    nn.BatchNorm1d(self.n0_features),
-                    nn.ReLU(),
-                    #nn.Dropout(0.15),
-                    # define the 2nd convolutional layer
-                    nn.Conv1d(self.n0_features, self.n1_features, self.kernel_size, self.stride), # output is (332 - 7)/3 + 1 = 109
-                    nn.BatchNorm1d(self.n1_features),
-                    nn.ReLU(),
-                    #nn.Dropout(0.15),
-                    # define the 3rd convolutional layer
-                    nn.Conv1d(self.n1_features, self.n2_features, self.kernel_size, self.stride), # output is (109 - 7)/3 + 1 = 35
-                    nn.BatchNorm1d(self.n2_features),
-                    nn.ReLU()
-                )
-                self.conv2 = nn.Sequential(
-                    nn.Conv1d(self.n2_features, 1, 35, 1),
-                    nn.BatchNorm1d(1),
-                    nn.ReLU())
+            self.conv = nn.Sequential(
+                # define the 1st convolutional layer
+                nn.Conv1d(1, self.n0_features, self.kernel_size, self.stride),# output is (1000 - 7)/3 + 1 = 332
+                nn.BatchNorm1d(self.n0_features),
+                nn.ReLU(),
+                #nn.Dropout(0.15),
+                # define the 2nd convolutional layer
+                nn.Conv1d(self.n0_features, self.n1_features, self.kernel_size, self.stride), # output is (332 - 7)/3 + 1 = 109
+                nn.BatchNorm1d(self.n1_features),
+                nn.ReLU(),
+                #nn.Dropout(0.15),
+                # define the 3rd convolutional layer
+                nn.Conv1d(self.n1_features, self.n2_features, self.kernel_size, self.stride), # output is (109 - 7)/3 + 1 = 35
+                nn.BatchNorm1d(self.n2_features),
+                nn.ReLU()
+            )
+            self.conv2 = nn.Sequential(
+                nn.Conv1d(self.n2_features, 1, 35, 1),
+                nn.BatchNorm1d(1),
+                nn.ReLU())
         elif mode == 1: # for minimum input size of 500
             # initialize model internal parameters
             self.kernel_size = 5
@@ -263,7 +239,7 @@ class PCConvNetContrastive(nn.Module):
 	 pitch contours as input
     """
 
-    def __init__(self, mode, num_classes = 5, regression = False):
+    def __init__(self, mode, num_classes = 5, regression = True):
         """
         Initializes the class with internal parameters for the different layers
         Args:
@@ -305,7 +281,6 @@ class PCConvNetContrastive(nn.Module):
             #Fully Connected Layer
             self.fc = nn.Sequential(
                     nn.Linear(self.n2_features, self.n2_features//2),
-                    #nn.Linear(self.n2_features, self.n2_features//2),
                     nn.Linear(self.n2_features//2, self.num_classes))
     def forward_conv(self, input):
         # get mini batch size from input and reshape

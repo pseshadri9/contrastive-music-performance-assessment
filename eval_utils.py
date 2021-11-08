@@ -92,15 +92,9 @@ def eval_model(model, criterion, data, metric, mtype, ctype, extra_outs = 0):
         mini_batch_size = model_input.size(0)
         if mtype == 'lstm':
             model.init_hidden(mini_batch_size)
-        #if model_input.shape[0] % 2 == 1 and model_input.shape[0] != 1:
-        #    model_input = model_input[:-1]
-        #    model_target = model_target[:-1]
-        #half = model_input.shape[0] // 2
-        #model_input1 = model_input[:half]
-        #model_input2 = model_input[half:]
         try:
             if type(model) is PCConvNetContrastive:
-                model_output = model.forward_once(model_input) # FORWARD ONCE
+                model_output = model.forward_once(model_input)
             else:
                 model_output = model.forward(model_input)
         except Exception as  e:
@@ -215,8 +209,6 @@ def eval_model_preds(model, criterion, data, metric, mtype, ctype, extra_outs = 
             loss_avg += loss.data
         # concatenate target and pred for computing validation metrics
         if latent:
-            #model_output = model_output.reshape(16,-1)
-            #print(model_target.size(), 2)
             if pred.size and False:
                 print(pred.size())
             pred = torch.cat((pred, model_output.data), dim=0) if pred.size else model_output.data
@@ -303,17 +295,14 @@ def eval_acc_contrastive(model, criterion, data, metric, mtype, ctype, extra_out
                 #print(preds_out.shape)
                 target = torch.cat((target, score_tensor), 0) if target.size else score_tensor
                 target = torch.cat((target, score_tensor2), 0) if target.size else score_tensor2
-                #pred = torch.cat((pred, model_output.data.view(-1)), 0) if pred.size else model_output.data.view(-1)
-                #pred = torch.cat((pred, model_output2.data.view(-1)), 0) if pred.size else model_output2.data.view(-1)
                 pred = model.classifier(torch.cat((model_output1, model_output2), dim=0))
                 pred = torch.argmax(pred, dim=1)
-                #tt = criterion.label_map((torch.cat((model_target, model_target2), dim=0)))
                 correct_s = torch.sum(torch.eq(pred, criterion.label_map((torch.cat((model_target, model_target2), dim=0)).squeeze())).float())
                 correct += correct_s
                 total += pred.shape[0]
                 #print(correct.data, total)
             else:
-                pred = torch.cat((pred, model_output.data), 0) if pred.size else model_output.data
+                pred = torch.cat((pred, model_output1.data), 0) if pred.size else model_output1.data
         acc = correct/total
         loss_avg /= num_batches
         ce_loss_avg /= num_batches
